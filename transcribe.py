@@ -1,25 +1,23 @@
-import os
-import sys
 import asyncio
-import re
-import psutil
 import glob
+import os
+import re
+import sys
 from datetime import datetime
-from pytube import YouTube, Playlist
+
+import click
 import pandas as pd
+import psutil
 from faster_whisper import WhisperModel
 from numba import cuda
+from pytube import Playlist, YouTube
 
-convert_single_video = 1  # Set this to 1 to process a single video, 0 for a playlist
-use_spacy_for_sentence_splitting = 1
-max_simultaneous_youtube_downloads = 4
-disable_cuda_override = 1 # Set this to 1 to disable CUDA even if it is available
-single_video_url = 'https://www.youtube.com/watch?v=sWAaJF9Wk0w'  # Single video URL
-playlist_url = 'https://www.youtube.com/playlist?list=PLjpPMe3LP1XKgqqzqz4j6M8-_M_soYxiV' # Playlist URL
-if convert_single_video:
-    print(f"Processing a single video: {single_video_url}")
-else:
-    print(f"Processing a playlist: {playlist_url}")
+# use_spacy_for_sentence_splitting = 1
+# max_simultaneous_youtube_downloads = 4
+# disable_cuda_override = 1 # Set this to 1 to disable CUDA even if it is available
+
+# single_video_url = 'https://www.youtube.com/watch?v=sWAaJF9Wk0w'  # Single video URL
+# playlist_url = 'https://www.youtube.com/playlist?list=PLjpPMe3LP1XKgqqzqz4j6M8-_M_soYxiV' # Playlist URL
 
 def add_to_system_path(new_path):
     if new_path not in os.environ["PATH"].split(os.pathsep): # Check if the new path already exists in PATH
@@ -39,49 +37,52 @@ def get_cuda_toolkit_path():
         return cuda_toolkit_path
     return None
 
-cuda_toolkit_path = get_cuda_toolkit_path()
-print("CUDA Toolkit Path:", cuda_toolkit_path)
-if cuda_toolkit_path:
-    add_to_system_path(cuda_toolkit_path)
-max_workers_transcribe = psutil.cpu_count(logical=False)  # Adjust based on your CPU cores
-os.makedirs('downloaded_audio', exist_ok=True)
-os.makedirs('generated_transcript_combined_texts', exist_ok=True)
-os.makedirs('generated_transcript_metadata_tables', exist_ok=True)
+def initialize_transcription(use_spacy_for_sentence_splitting):
+    cuda_toolkit_path = get_cuda_toolkit_path()
+    print("CUDA Toolkit Path:", cuda_toolkit_path)
+    if cuda_toolkit_path:
+        add_to_system_path(cuda_toolkit_path)
 
-if use_spacy_for_sentence_splitting:
-    import spacy
-    import spacy.cli
-    def download_spacy_model(model_name="en_core_web_sm"):
-        try:
-            return spacy.load(model_name) # Load the model if already installed
-        except OSError: # If not installed, download it
-            print(f"Downloading spaCy model {model_name}...")
-            spacy.cli.download(model_name)
-            return spacy.load(model_name)
-    nlp = download_spacy_model()  
-    def sophisticated_sentence_splitter(text):
-        text = remove_pagination_breaks(text)
-        doc = nlp(text)
-        sentences = [sent.text.strip() for sent in doc.sents]
-        return sentences        
-else:    
-    def sophisticated_sentence_splitter(text):
-        text = remove_pagination_breaks(text)
-        pattern = r'\.(?!\s*(com|net|org|io)\s)(?![0-9])'  # Split on periods that are not followed by a space and a top-level domain or a number
-        pattern += r'|[.!?]\s+'  # Split on whitespace that follows a period, question mark, or exclamation point
-        pattern += r'|\.\.\.(?=\s)'  # Split on ellipses that are followed by a space
-        sentences = re.split(pattern, text)
-        refined_sentences = []
-        temp_sentence = ""
-        for sentence in sentences:
-            if sentence is not None:
-                temp_sentence += sentence
-                if temp_sentence.count('"') % 2 == 0:  # If the number of quotes is even, then we have a complete sentence
-                    refined_sentences.append(temp_sentence.strip())
-                    temp_sentence = ""
-        if temp_sentence:
-            refined_sentences.append(temp_sentence.strip())  # Add the remaining part as the last sentence
-        return [s.strip() for s in refined_sentences if s.strip()]
+    os.makedirs('downloaded_audio', exist_ok=True)
+    os.makedirs('generated_transcript_combined_texts', exist_ok=True)
+    os.makedirs('generated_transcript_metadata_tables', exist_ok=True)
+
+    if use_spacy_for_sentence_splitting:
+        import spacy
+        import spacy.cli
+        def download_spacy_model(model_name="en_core_web_sm"):
+            try:
+                return spacy.load(model_name) # Load the model if already installed
+            except OSError: # If not installed, download it
+                print(f"Downloading spaCy model {model_name}...")
+                spacy.cli.download(model_name)
+                return spacy.load(model_name)
+        nlp = download_spacy_model()
+        def sophisticated_sentence_splitter(text):
+            text = remove_pagination_breaks(text)
+            doc = nlp(text)
+            sentences = [sent.text.strip() for sent in doc.sents]
+            return sentences
+        return sophisticated_sentence_splitter
+    else:
+        def sophisticated_sentence_splitter(text):
+            text = remove_pagination_breaks(text)
+            pattern = r'\.(?!\s*(com|net|org|io)\s)(?![0-9])'  # Split on periods that are not followed by a space and a top-level domain or a number
+            pattern += r'|[.!?]\s+'  # Split on whitespace that follows a period, question mark, or exclamation point
+            pattern += r'|\.\.\.(?=\s)'  # Split on ellipses that are followed by a space
+            sentences = re.split(pattern, text)
+            refined_sentences = []
+            temp_sentence = ""
+            for sentence in sentences:
+                if sentence is not None:
+                    temp_sentence += sentence
+                    if temp_sentence.count('"') % 2 == 0:  # If the number of quotes is even, then we have a complete sentence
+                        refined_sentences.append(temp_sentence.strip())
+                        temp_sentence = ""
+            if temp_sentence:
+                refined_sentences.append(temp_sentence.strip())  # Add the remaining part as the last sentence
+            return [s.strip() for s in refined_sentences if s.strip()]
+        return sophisticated_sentence_splitter
 
 def clean_filename(title):
     title = re.sub('[^\w\s-]', '', title)
@@ -109,7 +110,13 @@ async def download_audio(video):
             return None, None
     return audio_file_path, filename
 
-async def compute_transcript_with_whisper_from_audio_func(audio_file_path, audio_file_name, audio_file_size_mb):
+async def compute_transcript_with_whisper_from_audio_func(
+    audio_file_path,
+    audio_file_name,
+    audio_file_size_mb,
+    disable_cuda_override,
+    sophisticated_sentence_splitter,
+):
     cuda_toolkit_path = get_cuda_toolkit_path()
     if cuda_toolkit_path:
         add_to_system_path(cuda_toolkit_path)
@@ -150,11 +157,21 @@ async def compute_transcript_with_whisper_from_audio_func(audio_file_path, audio
     df.to_json(f'generated_transcript_metadata_tables/{audio_file_name}.json', orient='records', indent=4)
     return combined_transcript_text, combined_transcript_text_list_of_metadata_dicts, list_of_transcript_sentences
 
-async def process_video_or_playlist(url, max_simultaneous_downloads, max_workers_transcribe):
-    if convert_single_video:
+def is_single_video(url):
+    return 'playlist' not in url
+
+async def process_video_or_playlist(
+    url,
+    max_simultaneous_downloads,
+    disable_cuda_override,
+    sophisticated_sentence_splitter
+):
+    if is_single_video(url):
+        print(f"Processing a single video: {url}")
         yt = YouTube(url)
         videos = [yt]
     else:
+        print(f"Processing a playlist: {url}")
         playlist = Playlist(url)
         videos = playlist.videos
     download_semaphore = asyncio.Semaphore(max_simultaneous_downloads)
@@ -164,7 +181,9 @@ async def process_video_or_playlist(url, max_simultaneous_downloads, max_workers
                 audio_path, audio_filename = await download_audio(video)
                 if audio_path and audio_filename:
                     audio_file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
-                    await compute_transcript_with_whisper_from_audio_func(audio_path, audio_filename, audio_file_size_mb)
+                    await compute_transcript_with_whisper_from_audio_func(
+                        audio_path, audio_filename, audio_file_size_mb, disable_cuda_override, sophisticated_sentence_splitter
+                    )
         except Exception as e:
             print(f"Error processing video {video.title}: {e}")
     tasks = [download_and_transcribe(video) for video in videos]
@@ -176,49 +195,26 @@ def normalize_logprobs(avg_logprob, min_logprob, max_logprob):
 
 def remove_pagination_breaks(text: str) -> str:
     text = re.sub(r'-(\n)(?=[a-z])', '', text) # Remove hyphens at the end of lines when the word continues on the next line
-    text = re.sub(r'(?<=\w)(?<![.?!-]|\d)\n(?![\nA-Z])', ' ', text) # Replace line breaks that are not preceded by punctuation or list markers and not followed by an uppercase letter or another line break   
+    text = re.sub(r'(?<=\w)(?<![.?!-]|\d)\n(?![\nA-Z])', ' ', text) # Replace line breaks that are not preceded by punctuation or list markers and not followed by an uppercase letter or another line break
     return text
 
-def merge_transcript_segments_into_combined_text(segments):
-    if not segments:
-        return "", [], []
-    min_logprob = min(segment['avg_logprob'] for segment in segments)
-    max_logprob = max(segment['avg_logprob'] for segment in segments)
-    combined_text = ""
-    sentence_buffer = ""
-    list_of_metadata_dicts = []
-    list_of_sentences = []
-    char_count = 0
-    time_start = None
-    time_end = None
-    total_logprob = 0.0
-    segment_count = 0
-    for segment in segments:
-        if time_start is None:
-            time_start = segment['start']
-        time_end = segment['end']
-        total_logprob += segment['avg_logprob']
-        segment_count += 1
-        sentence_buffer += segment['text'] + " "
-        sentences = sophisticated_sentence_splitter(sentence_buffer)
-        for sentence in sentences:
-            combined_text += sentence.strip() + " "
-            list_of_sentences.append(sentence.strip())
-            char_count += len(sentence.strip()) + 1  # +1 for the space
-            avg_logprob = total_logprob / segment_count
-            model_confidence_score = normalize_logprobs(avg_logprob, min_logprob, max_logprob)
-            metadata = {
-                'start_char_count': char_count - len(sentence.strip()) - 1,
-                'end_char_count': char_count - 2,
-                'time_start': time_start,
-                'time_end': time_end,
-                'model_confidence_score': model_confidence_score
-            }
-            list_of_metadata_dicts.append(metadata)
-        if sentences:
-            sentence_buffer = sentences.pop() if len(sentences) % 2 != 0 else ""
-    return combined_text, list_of_metadata_dicts, list_of_sentences
+@click.command()
+@click.argument('url')
+@click.option('--spacy', '-p', is_flag=True, default=True, help='Use SpaCy for sentence splitting.')
+@click.option('--max-downloads', '-m', default=4, help='Maximum simultaneous YouTube downloads.')
+@click.option('--no-cuda', is_flag=True, default=True, help='Disable CUDA even if available.')
+def main(url, spacy, max_downloads, no_cuda):
+    use_spacy_for_sentence_splitting = 1 if spacy else 0
+    max_simultaneous_youtube_downloads = max_downloads
+    disable_cuda_override = 1 if no_cuda else 0
+    print(f"spacy: {spacy}")
+    print(f"max_downloads: {max_downloads}")
+    print(f"no_cuda: {no_cuda}")
+
+    sophisticated_sentence_splitter = initialize_transcription(use_spacy_for_sentence_splitting)
+    asyncio.run(process_video_or_playlist(
+        url, max_simultaneous_youtube_downloads, disable_cuda_override, sophisticated_sentence_splitter
+    ))
 
 if __name__ == '__main__':
-    url_to_process = single_video_url if convert_single_video else playlist_url
-    asyncio.run(process_video_or_playlist(url_to_process, max_simultaneous_youtube_downloads, max_workers_transcribe))
+    main()
