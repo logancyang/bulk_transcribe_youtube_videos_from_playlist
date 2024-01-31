@@ -144,7 +144,7 @@ async def compute_transcript_with_whisper_from_audio_func(
 
     for segment in segments:
         print(f"Processing segment: [Start: {segment.start:.2f}s, End: {segment.end:.2f}s] for file {audio_file_name} with text: {segment.text} ")
-        combined_transcript_text += segment.text + " "
+        combined_transcript_text += segment.text + "\n"
         sentences = sophisticated_sentence_splitter(segment.text)
         list_of_transcript_sentences.extend(sentences)
         metadata = {
