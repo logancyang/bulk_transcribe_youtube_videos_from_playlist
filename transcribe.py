@@ -115,6 +115,7 @@ async def compute_transcript_with_whisper_from_audio_func(
     audio_file_name,
     audio_file_size_mb,
     disable_cuda_override,
+    cpu_threads,
     sophisticated_sentence_splitter,
 ):
     cuda_toolkit_path = get_cuda_toolkit_path()
@@ -132,7 +133,7 @@ async def compute_transcript_with_whisper_from_audio_func(
         device = "cpu"
         compute_type = "auto"  # Use default compute type for CPU
 
-    model = WhisperModel("large-v3", device=device, compute_type=compute_type)
+    model = WhisperModel("large-v3", device=device, compute_type=compute_type, cpu_threads=cpu_threads)
     request_time = datetime.utcnow()
     print(f"Computing transcript for {audio_file_name} which has a {audio_file_size_mb :.2f}MB file size...")
     segments, info = await asyncio.to_thread(model.transcribe, audio_file_path, beam_size=10, vad_filter=True)
@@ -145,8 +146,8 @@ async def compute_transcript_with_whisper_from_audio_func(
     for segment in segments:
         print(f"Processing segment: [Start: {segment.start:.2f}s, End: {segment.end:.2f}s] for file {audio_file_name} with text: {segment.text} ")
         combined_transcript_text += segment.text + "\n"
-        sentences = sophisticated_sentence_splitter(segment.text)
-        list_of_transcript_sentences.extend(sentences)
+        # sentences = sophisticated_sentence_splitter(segment.text)
+        # list_of_transcript_sentences.extend(sentences)
         metadata = {
             "start": round(segment.start, 2),
             "end": round(segment.end, 2),
@@ -169,6 +170,7 @@ async def process_video_or_playlist(
     max_simultaneous_downloads,
     disable_cuda_override,
     sophisticated_sentence_splitter,
+    cpu_threads,
     use_oauth,
 ):
     if is_single_video(url):
@@ -189,7 +191,7 @@ async def process_video_or_playlist(
                 if audio_path and audio_filename:
                     audio_file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
                     await compute_transcript_with_whisper_from_audio_func(
-                        audio_path, audio_filename, audio_file_size_mb, disable_cuda_override, sophisticated_sentence_splitter
+                        audio_path, audio_filename, audio_file_size_mb, disable_cuda_override, cpu_threads, sophisticated_sentence_splitter
                     )
         except Exception as e:
             print(f"Error processing video {video.title}: {e}")
@@ -210,9 +212,10 @@ def remove_pagination_breaks(text: str) -> str:
 @click.option('--spacy', '-p', is_flag=True, default=False, help='Use SpaCy for sentence splitting.')
 @click.option('--max-downloads', '-m', default=4, help='Maximum simultaneous YouTube downloads.')
 @click.option('--no-cuda', is_flag=True, default=True, help='Disable CUDA even if available.')
+@click.option('--cpu-threads', '-t', default=4, help='Number of CPU threads for Whisper transcription.')
 @click.option('--oauth', '-o', is_flag=True, default=True, help='Use oauth to bypass age restrictions.')
 # @click.option('--cookies-json', '-c', is_flag=False, help='Use cookies to bypass age restrictions.')
-def main(url, spacy, max_downloads, no_cuda, oauth):
+def main(url, spacy, max_downloads, no_cuda, cpu_threads, oauth):
     use_spacy_for_sentence_splitting = 1 if spacy else 0
     max_simultaneous_youtube_downloads = max_downloads
     disable_cuda_override = 1 if no_cuda else 0
@@ -223,7 +226,7 @@ def main(url, spacy, max_downloads, no_cuda, oauth):
     sophisticated_sentence_splitter = initialize_transcription(use_spacy_for_sentence_splitting)
 
     asyncio.run(process_video_or_playlist(
-        url, max_simultaneous_youtube_downloads, disable_cuda_override, sophisticated_sentence_splitter, oauth
+        url, max_simultaneous_youtube_downloads, disable_cuda_override, sophisticated_sentence_splitter, cpu_threads, oauth
     ))
 
 if __name__ == '__main__':
