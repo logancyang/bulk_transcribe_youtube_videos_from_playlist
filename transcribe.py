@@ -1,8 +1,10 @@
 import asyncio
 import glob
+import json
 import os
 import re
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 
 import click
@@ -11,10 +13,6 @@ import psutil
 from faster_whisper import WhisperModel
 from numba import cuda
 from pytube import Playlist, YouTube
-
-# use_spacy_for_sentence_splitting = 1
-# max_simultaneous_youtube_downloads = 4
-# disable_cuda_override = 1 # Set this to 1 to disable CUDA even if it is available
 
 # single_video_url = 'https://www.youtube.com/watch?v=sWAaJF9Wk0w'  # Single video URL
 # playlist_url = 'https://www.youtube.com/playlist?list=PLjpPMe3LP1XKgqqzqz4j6M8-_M_soYxiV' # Playlist URL
@@ -85,7 +83,9 @@ def initialize_transcription(use_spacy_for_sentence_splitting):
         return sophisticated_sentence_splitter
 
 def clean_filename(title):
+    print("Cleaning title:", title)
     title = re.sub('[^\w\s-]', '', title)
+    print("Cleaned title:", title)
     return re.sub('[-\s]+', '_', title).strip().lower()
 
 async def download_audio(video):
@@ -131,13 +131,17 @@ async def compute_transcript_with_whisper_from_audio_func(
         print("CUDA not available. Using CPU for transcription.")
         device = "cpu"
         compute_type = "auto"  # Use default compute type for CPU
+
     model = WhisperModel("large-v3", device=device, compute_type=compute_type)
     request_time = datetime.utcnow()
     print(f"Computing transcript for {audio_file_name} which has a {audio_file_size_mb :.2f}MB file size...")
     segments, info = await asyncio.to_thread(model.transcribe, audio_file_path, beam_size=10, vad_filter=True)
+    print(f"Transcription completed, post processing...")
+
     if not segments:
         print(f"No segments were returned for file {audio_file_name}.")
         return [], {}, "", [], request_time, datetime.utcnow(), 0, ""
+
     for segment in segments:
         print(f"Processing segment: [Start: {segment.start:.2f}s, End: {segment.end:.2f}s] for file {audio_file_name} with text: {segment.text} ")
         combined_transcript_text += segment.text + " "
@@ -152,9 +156,9 @@ async def compute_transcript_with_whisper_from_audio_func(
         combined_transcript_text_list_of_metadata_dicts.append(metadata)
     with open(f'generated_transcript_combined_texts/{audio_file_name}.txt', 'w') as file:
         file.write(combined_transcript_text)
-    df = pd.DataFrame(combined_transcript_text_list_of_metadata_dicts)
-    df.to_csv(f'generated_transcript_metadata_tables/{audio_file_name}.csv', index=False)
-    df.to_json(f'generated_transcript_metadata_tables/{audio_file_name}.json', orient='records', indent=4)
+    # df = pd.DataFrame(combined_transcript_text_list_of_metadata_dicts)
+    # df.to_csv(f'generated_transcript_metadata_tables/{audio_file_name}.csv', index=False)
+    # df.to_json(f'generated_transcript_metadata_tables/{audio_file_name}.json', orient='records', indent=4)
     return combined_transcript_text, combined_transcript_text_list_of_metadata_dicts, list_of_transcript_sentences
 
 def is_single_video(url):
@@ -164,11 +168,14 @@ async def process_video_or_playlist(
     url,
     max_simultaneous_downloads,
     disable_cuda_override,
-    sophisticated_sentence_splitter
+    sophisticated_sentence_splitter,
+    use_oauth,
 ):
     if is_single_video(url):
         print(f"Processing a single video: {url}")
-        yt = YouTube(url)
+        # Create a YouTube instance with the cookies
+        yt = YouTube(url, use_oauth=use_oauth, allow_oauth_cache=use_oauth)
+
         videos = [yt]
     else:
         print(f"Processing a playlist: {url}")
@@ -200,10 +207,12 @@ def remove_pagination_breaks(text: str) -> str:
 
 @click.command()
 @click.argument('url')
-@click.option('--spacy', '-p', is_flag=True, default=True, help='Use SpaCy for sentence splitting.')
+@click.option('--spacy', '-p', is_flag=True, default=False, help='Use SpaCy for sentence splitting.')
 @click.option('--max-downloads', '-m', default=4, help='Maximum simultaneous YouTube downloads.')
 @click.option('--no-cuda', is_flag=True, default=True, help='Disable CUDA even if available.')
-def main(url, spacy, max_downloads, no_cuda):
+@click.option('--oauth', '-o', is_flag=True, default=True, help='Use oauth to bypass age restrictions.')
+# @click.option('--cookies-json', '-c', is_flag=False, help='Use cookies to bypass age restrictions.')
+def main(url, spacy, max_downloads, no_cuda, oauth):
     use_spacy_for_sentence_splitting = 1 if spacy else 0
     max_simultaneous_youtube_downloads = max_downloads
     disable_cuda_override = 1 if no_cuda else 0
@@ -212,9 +221,33 @@ def main(url, spacy, max_downloads, no_cuda):
     print(f"no_cuda: {no_cuda}")
 
     sophisticated_sentence_splitter = initialize_transcription(use_spacy_for_sentence_splitting)
+
     asyncio.run(process_video_or_playlist(
-        url, max_simultaneous_youtube_downloads, disable_cuda_override, sophisticated_sentence_splitter
+        url, max_simultaneous_youtube_downloads, disable_cuda_override, sophisticated_sentence_splitter, oauth
     ))
 
 if __name__ == '__main__':
     main()
+
+
+"""
+NOTE: There was an age restriction error even with oauth=True, the solution is in pytube/__main__.py line 253
+https://github.com/pytube/pytube/issues/1712
+
+def bypass_age_gate(self):
+    innertube = InnerTube(
+        client='ANDROID',  # ANDROID instead of ANDROID_EMBED worked!
+        use_oauth=self.use_oauth,
+        allow_cache=self.allow_oauth_cache
+    )
+    innertube_response = innertube.player(self.video_id)
+
+    playability_status = innertube_response['playabilityStatus'].get('status', None)
+
+    # If we still can't access the video, raise an exception
+    # (tier 3 age restriction)
+    if playability_status == 'UNPLAYABLE':
+        raise exceptions.AgeRestrictedError(self.video_id)
+
+    self._vid_info = innertube_response
+"""
