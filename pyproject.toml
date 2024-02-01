@@ -15,6 +15,7 @@ pandas = "^2.2.0"
 fastapi = "^0.109.0"
 spacy = "^3.7.2"
 numba = "^0.59.0"
+click = "^8.1.7"
 
 
 [build-system]

@@ -211,17 +211,17 @@ def remove_pagination_breaks(text: str) -> str:
 @click.argument('url')
 @click.option('--spacy', '-p', is_flag=True, default=False, help='Use SpaCy for sentence splitting.')
 @click.option('--max-downloads', '-m', default=4, help='Maximum simultaneous YouTube downloads.')
-@click.option('--no-cuda', is_flag=True, default=True, help='Disable CUDA even if available.')
+@click.option('--cuda', '-c', is_flag=True, default=False, help='Use CUDA if available.')
 @click.option('--cpu-threads', '-t', default=4, help='Number of CPU threads for Whisper transcription.')
 @click.option('--oauth', '-o', is_flag=True, default=True, help='Use oauth to bypass age restrictions.')
 # @click.option('--cookies-json', '-c', is_flag=False, help='Use cookies to bypass age restrictions.')
-def main(url, spacy, max_downloads, no_cuda, cpu_threads, oauth):
+def main(url, spacy, max_downloads, cuda, cpu_threads, oauth):
     use_spacy_for_sentence_splitting = 1 if spacy else 0
     max_simultaneous_youtube_downloads = max_downloads
-    disable_cuda_override = 1 if no_cuda else 0
+    disable_cuda_override = 0 if cuda else 1
     print(f"spacy: {spacy}")
     print(f"max_downloads: {max_downloads}")
-    print(f"no_cuda: {no_cuda}")
+    print(f"cuda: {cuda}")
 
     sophisticated_sentence_splitter = initialize_transcription(use_spacy_for_sentence_splitting)
 
