@@ -1,2 +1,22 @@
-[tool.ruff]
-ignore = ["E501"]
+[tool.poetry]
+name = "bulk-transcribe-youtube-videos-from-playlist"
+version = "0.0.1"
+description = ""
+authors = ["Logan Yang <logancyang@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+faster-whisper = "^0.10.0"
+psutil = "^5.9.8"
+pytube = "^15.0.0"
+pandas = "^2.2.0"
+fastapi = "^0.109.0"
+spacy = "^3.7.2"
+numba = "^0.59.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -4,8 +4,8 @@
 
 This Python-based tool is designed for transcribing YouTube videos and playlists into text. It integrates various technologies like faster-whisper for transcription, SpaCy for natural language processing, and CUDA for GPU acceleration, aimed at processing video content efficiently. The script is capable of handling both individual videos and entire playlists, outputting accurate transcripts along with metadata.
 
-| ![Bulk Transcripts Have Never Been This Easy!](https://github.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/blob/main/readme_image_2.webp) | 
-|:--:| 
+| ![Bulk Transcripts Have Never Been This Easy!](https://github.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/blob/main/readme_image_2.webp) |
+|:--:|
 | *Bulk Transcripts Have Never Been This Easy!* |
 
 ## Functional Overview
@@ -19,11 +19,11 @@ This Python-based tool is designed for transcribing YouTube videos and playlists
 
 ### Detailed Workflow
 
-1. **Initialization**: 
+1. **Initialization**:
    - The script starts by determining whether to process a single video or a playlist based on the `convert_single_video` flag.
    - It sets up necessary directories for storing downloaded audio, transcripts, and metadata.
 
-2. **Environment Configuration**: 
+2. **Environment Configuration**:
    - Adds CUDA Toolkit path to the system environment for GPU utilization.
    - Configures the number of workers for transcription based on the CPU core count.
 
@@ -44,9 +44,9 @@ This Python-based tool is designed for transcribing YouTube videos and playlists
 
 7. **Display/Read**:
    - To make the transcripts easier to read, an html file is provided, `transcript_reader.html`, which does further clean up and offers a "Reader Mode" where you can choose the font, text size, text width, and toggle dark mode. Simply open this html file in your browser and paste in the transcript text from one of the generated files in the `generated_transcript_combined_texts` folder.
-     
-| ![Screenshot of it in Action](https://raw.githubusercontent.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/main/screenshot.webp) | 
-|:--:| 
+
+| ![Screenshot of it in Action](https://raw.githubusercontent.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/main/screenshot.webp) |
+|:--:|
 | *Screenshot of it in Action* |
 
 | ![Screenshot 1](https://raw.githubusercontent.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/main/transcript_reader_screenshot_1.webp) | ![Screenshot 2](https://raw.githubusercontent.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/main/transcript_reader_screenshot_2.webp) |
@@ -119,7 +119,7 @@ This Python-based tool is designed for transcribing YouTube videos and playlists
 ### Main Execution
 
 - The script's main execution starts in the `__main__` block, where it selects the URL to process (single video or playlist) and initiates the `process_video_or_playlist` coroutine.
-- **Concurrent Downloads and Transcription**: `process_video_or_playlist` handles the asynchronous downloading and transcription of videos. It creates a semaphore to limit the number of simultaneous downloads based on `max_simultaneous_youtube_downloads`. 
+- **Concurrent Downloads and Transcription**: `process_video_or_playlist` handles the asynchronous downloading and transcription of videos. It creates a semaphore to limit the number of simultaneous downloads based on `max_simultaneous_youtube_downloads`.
 
 ## Whisper Model Configuration
 
@@ -201,6 +201,6 @@ See my other open-source projects at [https://github.com/Dicklesworthstone](http
 - [SQLAlchemy Data Model Visualizer](https://github.com/Dicklesworthstone/sqlalchemy_data_model_visualizer)
 - [Llama2 Aided Tesseract OCR](https://github.com/Dicklesworthstone/llama2_aided_tesseract)
 
-| ![Take Your YouTube Transcript Addiction to the Next Level!](https://github.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/blob/main/readme_image_1.webp) | 
-|:--:| 
+| ![Take Your YouTube Transcript Addiction to the Next Level!](https://github.com/Dicklesworthstone/bulk_transcribe_youtube_videos_from_playlist/blob/main/readme_image_1.webp) |
+|:--:|
 | *Take Your YouTube Transcript Addiction to the Next Level!* |
