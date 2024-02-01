@@ -93,10 +93,10 @@ async def download_audio(video):
     base_filename = filename
     counter = 1
     audio_dir = 'downloaded_audio'
-    audio_file_path = os.path.join(audio_dir, f"{filename}.mp4")
+    audio_file_path = os.path.join(audio_dir, f"{filename}.mp3")
     while os.path.exists(audio_file_path):
         filename = f"{base_filename}_{counter}"
-        audio_file_path = os.path.join(audio_dir, f"{filename}.mp4")
+        audio_file_path = os.path.join(audio_dir, f"{filename}.mp3")
         counter += 1
     if not os.path.exists(audio_file_path):
         stream = video.streams.filter(only_audio=True).first()
@@ -104,7 +104,7 @@ async def download_audio(video):
             raise ValueError(f"No audio stream found for video: {video.title}")
         try:
             os.makedirs(audio_dir, exist_ok=True)
-            audio_file_path = stream.download(output_path=audio_dir, filename=f"{filename}.mp4")
+            audio_file_path = stream.download(output_path=audio_dir, filename=f"{filename}.mp3")
         except Exception as e:
             print(f"Error downloading video {video.title}: {e}")
             return None, None
@@ -155,7 +155,7 @@ async def compute_transcript_with_whisper_from_audio_func(
             "avg_logprob": round(segment.avg_logprob, 2)
         }
         combined_transcript_text_list_of_metadata_dicts.append(metadata)
-    with open(f'generated_transcript_combined_texts/{audio_file_name}.txt', 'w') as file:
+    with open(f'generated_transcript_combined_texts/{audio_file_name}.md', 'w') as file:
         file.write(combined_transcript_text)
     # df = pd.DataFrame(combined_transcript_text_list_of_metadata_dicts)
     # df.to_csv(f'generated_transcript_metadata_tables/{audio_file_name}.csv', index=False)
@@ -210,11 +210,10 @@ def remove_pagination_breaks(text: str) -> str:
 @click.command()
 @click.argument('url')
 @click.option('--spacy', '-p', is_flag=True, default=False, help='Use SpaCy for sentence splitting.')
-@click.option('--max-downloads', '-m', default=4, help='Maximum simultaneous YouTube downloads.')
+@click.option('--max-downloads', '-m', default=1, help='Maximum simultaneous YouTube downloads.')
 @click.option('--cuda', '-c', is_flag=True, default=False, help='Use CUDA if available.')
 @click.option('--cpu-threads', '-t', default=4, help='Number of CPU threads for Whisper transcription.')
-@click.option('--oauth', '-o', is_flag=True, default=True, help='Use oauth to bypass age restrictions.')
-# @click.option('--cookies-json', '-c', is_flag=False, help='Use cookies to bypass age restrictions.')
+@click.option('--oauth', '-o', is_flag=True, default=False, help='Use oauth to bypass age restrictions.')
 def main(url, spacy, max_downloads, cuda, cpu_threads, oauth):
     use_spacy_for_sentence_splitting = 1 if spacy else 0
     max_simultaneous_youtube_downloads = max_downloads
